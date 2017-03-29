@@ -10,7 +10,7 @@ typedef struct _server
     uint16_t port;
     struct sockaddr_in server_addr;
 
-    bool (*handler) (struct _server *, int);                  /* handler for packet should return True on success*/
+    bool (*handler) (struct _server *, ReadCTX *);                  /* handler for packet should return True on success*/
 
     /* For select */
     int32_t maxfd;
@@ -23,7 +23,7 @@ typedef struct _server
 } Server;
 
 
-Server *newServer(uint16_t port, bool (*handler) (Server *, int));
+Server *newServer(uint16_t port, bool (*handler) (Server *, ReadCTX *ctx));
 
 void ServerLoop(Server *);
 

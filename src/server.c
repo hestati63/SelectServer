@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-Server *newServer(uint16_t port, bool (*handler) (Server *, int))
+Server *newServer(uint16_t port, bool (*handler) (Server *, ReadCTX *))
 {
     Server *this = (Server *)calloc(1, sizeof(Server));
     if(!this)
@@ -85,7 +85,7 @@ static void ReadAct(Server *this)
             }
             if(nbytes == 0  ||
                     (nbytes == -1 && errno != EAGAIN) ||
-                    !this->handler(this, cn))
+                    !this->handler(this, ctx))
                 ServerFDremove(this, cn);
             nready--;
         }
@@ -156,5 +156,15 @@ void ServerFDremove(Server *this, int32_t fd)
 {
     FD_CLR(fd, &this->allfds);
     close(fd);
+
+    WriteCTX *ctx = this->wCTXHead;
+    WriteCTX *ptr;
+    while(ctx)
+    {
+        ptr = ctx;
+        ctx = ctx->next;
+        if(ptr->fd == fd)
+            removeCTX(this, ptr);
+    }
 }
 
