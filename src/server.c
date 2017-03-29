@@ -1,4 +1,5 @@
 #include "server.h"
+#include "context.h"
 #include "util.h"
 #include <errno.h>
 #include <arpa/inet.h>
@@ -10,13 +11,12 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-Server *newServer(uint16_t port, bool (*handler) (SelectCTX *))
+Server *newServer(uint16_t port, bool (*handler) (Server *, int))
 {
     Server *this = (Server *)calloc(1, sizeof(Server));
     if(!this)
         fatal("error during creation of server");
 
-    uint32_t server_fd;
     this->port = port;
     this->handler = handler;
 
@@ -41,15 +41,15 @@ Server *newServer(uint16_t port, bool (*handler) (SelectCTX *))
         fatal("listen() error");
 
     this->maxfd = this->fd;
-    FD_ZERO(&this->readfds);
+    FD_ZERO(&this->allfds);
     ServerFDadd(this, this->fd);
 
     return this;
 }
 
-void ServerLoop(Server *this)
+static void ReadAct(Server *this)
 {
-    fd_set allfds;
+    fd_set readfds;
     int nready;
     static struct timeval tv;
     tv.tv_sec = 0;
@@ -58,67 +58,103 @@ void ServerLoop(Server *this)
     struct sockaddr_in client_addr;
     int len = sizeof(client_addr);
     int client_fd;
-    int opts;
 
-    #define MAXLINE 4096
     int nbytes, cn;
     char buf[MAXLINE];
-    SelectCTX *ctx;
 
-    while(1)
+    readfds = this->allfds;
+    nready = select(this->maxfd, &readfds, (fd_set *)0, (fd_set *)0, &tv);
+
+    if(FD_ISSET(this->fd, &readfds))
     {
-        allfds = this->readfds;
-        nready = select(this->maxfd, &allfds, (fd_set *)0, (fd_set *)0, &tv);
+        client_fd = accept(this->fd, (struct sockaddr *)&client_addr, (socklen_t *)&len);
+        ServerFDadd(this, client_fd);
+        return;
+    }
 
-        if(FD_ISSET(this->fd, &allfds))
+    ReadCTX *ctx = this->rCTXHead;
+    for(cn = 0; cn < this->maxfd && nready != 0; cn++, ctx = ctx->next)
+    {
+        if(FD_ISSET(cn, &readfds))
         {
-            client_fd = accept(this->fd, (struct sockaddr *)&client_addr, (socklen_t *)&len);
-            if((opts = fcntl(client_fd, F_GETFL)) < 0 || fcntl(client_fd, F_SETFL, opts | O_NONBLOCK))
-                fatal("fcntl() fail");
-            ServerFDadd(this, client_fd);
-            continue;
-        }
-
-        for(cn = 0; cn < this->maxfd && nready != 0; cn++)
-        {
-            if(FD_ISSET(cn, &allfds))
+            while((nbytes = read(cn, buf, MAXLINE) > 0))
             {
-                ctx = this->CTXList[cn];
-                while((nbytes = read(cn, buf, MAXLINE)) > 0)
-                {
-                    ctx->buffer = realloc(ctx->buffer, ctx->sz + nbytes);
-                    memcpy(ctx->buffer + ctx->sz, buf, nbytes);
-                    ctx->sz += nbytes;
-                }
-
-                if(nbytes == 0  ||
-                        (nbytes == -1 && errno != EAGAIN) ||
-                        !this->handler(this->CTXList[cn]))
-                {
-                    if(this->CTXList[cn]->buffer)
-                        free(this->CTXList[cn]->buffer);
-                    FD_CLR(cn, &this->readfds);
-                    close(cn);
-                }
-                nready--;
+                ctx->buffer = realloc(ctx->buffer, ctx->sz + nbytes);
+                memcpy(ctx->buffer + ctx->sz, buf, nbytes);
+                ctx->sz += nbytes;
             }
+            if(nbytes == 0  ||
+                    (nbytes == -1 && errno != EAGAIN) ||
+                    !this->handler(this, cn))
+                ServerFDremove(this, cn);
+            nready--;
         }
+    }
+}
+
+static void WriteAct(Server *this)
+{
+    fd_set writefds;
+    static struct timeval tv;
+    tv.tv_sec = 0;
+    tv.tv_usec = 200;
+
+    writefds = this->allfds;
+    if(select(this->maxfd, (fd_set *)0, &writefds, (fd_set *)0, &tv) > 0)
+    {
+        WriteCTX *ctx = this->wCTXHead;
+        while(ctx)
+            ctx = FD_ISSET(ctx->fd, &writefds) ?
+                flushCTX(this, ctx) : ctx->next;
+    }
+}
+
+void ServerLoop(Server *this)
+{
+    for(;;)
+    {
+        ReadAct(this);
+        WriteAct(this);
     }
 }
 
 void ServerFDadd(Server *this, int32_t fd)
 {
-    FD_SET(fd, &this->readfds);
-    if(fd + 1 > this->maxfd)
+    int opts;
+    if((opts = fcntl(fd, F_GETFL)) < 0 ||
+            fcntl(fd, F_SETFL, opts | O_NONBLOCK))
+        fatal("fcntl() fail");
+
+    ReadCTX *rCTX;
+    FD_SET(fd, &this->allfds);
+    if(fd > this->maxfd - 1)
     {
         this->maxfd = fd + 1;
-        this->CTXList = realloc(this->CTXList, sizeof(SelectCTX *) * this->maxfd);
+        rCTX = calloc(1, sizeof(ReadCTX));
+        rCTX->fd = fd;
+
+        if(this->rCTXTail == NULL)
+        {
+            this->rCTXHead = this->rCTXTail = rCTX;
+        }
+        else
+        {
+            this->rCTXTail->next = rCTX;
+            this->rCTXTail = rCTX;
+        }
     }
+    if(rCTX->buffer)
+    {
+        free(rCTX->buffer);
+        rCTX->buffer = NULL;
+        rCTX->sz = 0;
+        rCTX->pos = 0;
+    }
+}
 
-    if(this->CTXList[fd] == NULL)
-        this->CTXList[fd] = malloc(sizeof(SelectCTX));
-
-    bzero(this->CTXList[fd], sizeof(SelectCTX));
-    this->CTXList[fd]->fd = fd;
+void ServerFDremove(Server *this, int32_t fd)
+{
+    FD_CLR(fd, &this->allfds);
+    close(fd);
 }
 
