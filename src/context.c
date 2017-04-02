@@ -64,6 +64,7 @@ void addCTX(Server *server, WriteCTX *wCTX)
 WriteCTX *flushCTX(Server *server, WriteCTX *ctx)
 {
     WriteCTX *wctx = ctx;
+
     int nbytes = write(ctx->fd, ctx->buffer + ctx->pos, ctx->size - ctx->pos);
 
     if(nbytes == 0 ||
@@ -76,6 +77,7 @@ WriteCTX *flushCTX(Server *server, WriteCTX *ctx)
     }
     else
     {
+        wctx = wctx->next;
         if(nbytes >= ctx->size - ctx->pos)
             removeCTX(server, ctx);
         else

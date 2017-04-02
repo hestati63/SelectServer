@@ -73,11 +73,11 @@ static void ReadAct(Server *this)
     }
 
     ReadCTX *ctx = this->rCTXHead;
-    for(cn = 0; cn < this->maxfd && nready != 0; cn++, ctx = ctx->next)
+    for(cn = this->fd; cn < this->maxfd && nready != 0; cn++, ctx = ctx->next)
     {
         if(FD_ISSET(cn, &readfds))
         {
-            while((nbytes = read(cn, buf, MAXLINE) > 0))
+            if((nbytes = read(cn, buf, MAXLINE-1)) > 0)
             {
                 ctx->buffer = realloc(ctx->buffer, ctx->sz + nbytes);
                 memcpy(ctx->buffer + ctx->sz, buf, nbytes);
@@ -143,6 +143,16 @@ void ServerFDadd(Server *this, int32_t fd)
             this->rCTXTail = rCTX;
         }
     }
+}
+
+void ServerFDremove(Server *this, int32_t fd)
+{
+    FD_CLR(fd, &this->allfds);
+    close(fd);
+
+    int i;
+    ReadCTX *rCTX = this->rCTXHead;
+    for(i = this->fd + 1; i < fd; rCTX = rCTX->next, i++);
     if(rCTX->buffer)
     {
         free(rCTX->buffer);
@@ -150,12 +160,6 @@ void ServerFDadd(Server *this, int32_t fd)
         rCTX->sz = 0;
         rCTX->pos = 0;
     }
-}
-
-void ServerFDremove(Server *this, int32_t fd)
-{
-    FD_CLR(fd, &this->allfds);
-    close(fd);
 
     WriteCTX *ctx = this->wCTXHead;
     WriteCTX *ptr;
