@@ -3,8 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-int fatal(char *fmt, ...)
-{
+int fatal(char *fmt, ...) {
     va_list args;
     va_start(args, fmt);
     vprintf(fmt, args);

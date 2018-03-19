@@ -4,23 +4,21 @@
 #include <unistd.h>
 #include <errno.h>
 
-int CTXRead(ReadCTX *ctx, char *buffer, size_t size)
-{
-    if(CTXGetsz(ctx) < size)
+int CTXRead(ReadCTX *ctx, char *buffer, size_t size) {
+    if (CTXGetsz(ctx) < size) {
         return -1;
+    }
 
     memcpy(buffer, ctx->buffer + ctx->pos, size);
     ctx->pos += size;
     return size;
 }
 
-int CTXGetsz(ReadCTX *ctx)
-{
+int CTXGetsz(ReadCTX *ctx) {
     return ctx->sz - ctx->pos;
 }
 
-void CTXDiscard(ReadCTX *ctx)
-{
+void CTXDiscard(ReadCTX *ctx) {
     int left = CTXGetsz(ctx);
     void *nptr = malloc(left);
     memcpy(nptr, ctx->buffer + ctx->pos, left);
@@ -29,72 +27,61 @@ void CTXDiscard(ReadCTX *ctx)
     ctx->sz = left;
     ctx->pos = 0;
     ctx->buffer = nptr;
-
 }
 
-int ServerWrite(Server *server, int fd, char *buffer, size_t size)
-{
+void ServerWrite(Server *server, int fd, char *buffer, size_t size) {
     WriteCTX *wCTX = calloc(1, sizeof(WriteCTX));
     wCTX->fd = fd;
     wCTX->buffer = malloc(size);
-    if(wCTX->buffer)
-    {
+    if (wCTX->buffer) {
         memcpy(wCTX->buffer, buffer, size);
         wCTX->size = size;
         addCTX(server, wCTX);
-    }
-    else
+    } else {
         free(wCTX);
+    }
 }
 
-void addCTX(Server *server, WriteCTX *wCTX)
-{
-    if(server->wCTXHead == NULL)
-    {
+void addCTX(Server *server, WriteCTX *wCTX) {
+    if (server->wCTXHead == NULL) {
         server->wCTXHead = server->wCTXTail = wCTX;
-    }
-    else
-    {
+    } else {
         server->wCTXTail->next = wCTX;
         wCTX->prev = server->wCTXTail;
         server->wCTXTail = wCTX;
     }
 }
 
-WriteCTX *flushCTX(Server *server, WriteCTX *ctx)
-{
+WriteCTX *flushCTX(Server *server, WriteCTX *ctx) {
     WriteCTX *wctx = ctx;
 
     int nbytes = write(ctx->fd, ctx->buffer + ctx->pos, ctx->size - ctx->pos);
-
-    if(nbytes == 0 ||
-            (nbytes == -1 && errno != EAGAIN))
-
-    {
+    if (nbytes == 0 ||
+            (nbytes == -1 && errno != EAGAIN)) {
         while(wctx->next || wctx->fd != ctx->fd)
             wctx = wctx->next;
         ServerFDremove(server, ctx->fd);
-    }
-    else
-    {
+    } else {
         wctx = wctx->next;
-        if(nbytes >= ctx->size - ctx->pos)
+        if (nbytes >= ctx->size - ctx->pos) {
             removeCTX(server, ctx);
-        else
+        } else {
             ctx->pos += nbytes;
+        }
     }
-
     return wctx;
 }
 
 
-void removeCTX(Server *server, WriteCTX *ctx)
-{
-    if(ctx == server->wCTXHead)
+void removeCTX(Server *server, WriteCTX *ctx) {
+    if (ctx == server->wCTXHead) {
         server->wCTXHead = ctx->next;
-    if(ctx == server->wCTXTail)
+    }
+    if (ctx == server->wCTXTail) {
         server->wCTXTail = ctx->prev;
-    if(ctx->buffer)
+    }
+    if(ctx->buffer) {
         free(ctx->buffer);
+    }
     free(ctx);
 }
