@@ -11,6 +11,7 @@ typedef struct _RCTX
     uint32_t pos;
 
     struct _RCTX *next;
+    void *aux;
 } ReadCTX;
 
 typedef struct _WCTX
