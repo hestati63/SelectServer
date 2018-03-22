@@ -14,7 +14,7 @@ int CTXRead(ReadCTX *ctx, char *buffer, size_t size) {
     return size;
 }
 
-int CTXGetsz(ReadCTX *ctx) {
+unsigned int CTXGetsz(ReadCTX *ctx) {
     return ctx->sz - ctx->pos;
 }
 
