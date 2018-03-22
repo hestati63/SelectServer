@@ -5,7 +5,7 @@
 
 typedef struct _RCTX
 {
-     int8_t* buffer;
+     char* buffer;
      int32_t fd;
     uint32_t sz;
     uint32_t pos;
@@ -17,7 +17,7 @@ typedef struct _WCTX
 {
     struct _WCTX *next;
     struct _WCTX *prev;
-    int8_t* buffer;
+    char* buffer;
     int32_t fd;
     int32_t size;
     int32_t pos;

@@ -1,5 +1,5 @@
 #ifndef __SS_UTIL__
 #define __SS_UTIL__
 
-int fatal(char *, ...);
+int fatal(const char *, ...);
 #endif

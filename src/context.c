@@ -26,13 +26,13 @@ void CTXDiscard(ReadCTX *ctx) {
 
     ctx->sz = left;
     ctx->pos = 0;
-    ctx->buffer = nptr;
+    ctx->buffer = (char *)nptr;
 }
 
 void ServerWrite(Server *server, int fd, char *buffer, size_t size) {
-    WriteCTX *wCTX = calloc(1, sizeof(WriteCTX));
+    WriteCTX *wCTX = (WriteCTX *)calloc(1, sizeof(WriteCTX));
     wCTX->fd = fd;
-    wCTX->buffer = malloc(size);
+    wCTX->buffer = (char *)malloc(size);
     if (wCTX->buffer) {
         memcpy(wCTX->buffer, buffer, size);
         wCTX->size = size;

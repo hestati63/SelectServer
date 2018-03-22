@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <arpa/inet.h>
 #include "context.h"
+
 typedef struct _server
 {
     int32_t fd;
@@ -36,4 +37,4 @@ Server *newServer(uint16_t port, bool (*handler) (Server *, ReadCTX *ctx));
 void ServerLoop(Server *);
 void ServerFDadd(Server *, int32_t);
 void ServerFDremove(Server *, int32_t);
-
+#endif
