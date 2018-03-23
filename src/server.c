@@ -11,7 +11,8 @@
 #include <stdio.h>
 #include <fcntl.h>
 
-Server *newServer(uint16_t port, bool (*handler) (Server *, ReadCTX *)) {
+Server *newServer(uint16_t port,
+        bool (*handler) (Server *, ReadCTX *, void *), void *aux) {
     Server *_this = (Server *)calloc(1, sizeof(Server));
     if(!_this) {
         fatal("error during creation of server");
@@ -35,7 +36,7 @@ Server *newServer(uint16_t port, bool (*handler) (Server *, ReadCTX *)) {
             || fcntl(_this->fd, F_SETFL, opts | O_NONBLOCK)) {
         fatal("fcntl() error");
     }
-
+    _this->aux = aux;
     _this->server_addr.sin_family = AF_INET;
     _this->server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     _this->server_addr.sin_port = htons(port);
@@ -91,7 +92,7 @@ static void ReadAct(Server *_this) {
             }
             if(nbytes == 0  ||
                     (nbytes == -1 && errno != EAGAIN) ||
-                    !_this->handler(_this, ctx)) {
+                    !_this->handler(_this, ctx, _this->aux)) {
                 ServerFDremove(_this, cn);
             }
             nready--;
